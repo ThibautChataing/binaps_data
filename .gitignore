@@ -1,0 +1,14 @@
+output/
+data/
+result/
+.vscode/
+results/
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
+*.dat
+*.pyc
+*.log
+*.html
+*.csv
+*.zip
