@@ -4,8 +4,8 @@ import datetime
 import os
 
 from binaps_data.utils.logs import log as LOG
-from binaps_data.pattern import PatternManager
-from binaps_data.line import LineManager
+from binaps_data.pattern import PatternManager, PatternManagerWithCat
+from binaps_data.line import LineManager, LineManagerWithCat
 
 
 def argument_parser(cp_args=None) -> argparse.Namespace:
@@ -72,37 +72,41 @@ def main(cp_args=None):
     today = datetime.datetime.now().strftime("%Y-%m-%dT%Hh%Mm%Ss")
     args = argument_parser(cp_args)
 
-    pattern_manager = PatternManager(max_using_pattern=args.max_using_pattern)
-    pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
-                                    nbr_pattern=args.nbr_pattern,
-                                    min_size=args.min_size,
-                                    max_size=args.max_size,
-                                    split=args.split,
-                                    output_dir=args.output_dir,
-                                    no_intersections=args.no_intersections,
-                                    categories_off=args.categories_off,
-                                    today=today)
+    if args.categories_off:
+        pattern_manager = PatternManager(max_using_pattern=args.max_using_pattern)
+        line_manager = LineManager()
+    else:
+        pattern_manager = PatternManagerWithCat(max_using_pattern=args.max_using_pattern)
+        line_manager = LineManagerWithCat()
 
-    line_manager = LineManager()
+    pattern_files = pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
+                                                    nbr_pattern=args.nbr_pattern,
+                                                    min_size=args.min_size,
+                                                    max_size=args.max_size,
+                                                    split=args.split,
+                                                    output_dir=args.output_dir,
+                                                    no_intersections=args.no_intersections,
+                                                    today=today)
 
-    data_file = os.path.join(args.output_dir, f"synthetic_data_{args.nbr_of_rows}_{args.nbr_of_feature}_"
-                                              f"{args.nbr_pattern}_{args.noise}_{today}.dat")
-    line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
-                                       patterns_manager=pattern_manager,
-                                       max_pat_by_line=args.max_pattern_on_a_line,
-                                       noise=args.noise,
-                               data_file=data_file)
+    data_files = line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
+                                            patterns_manager=pattern_manager,
+                                            max_pat_by_line=args.max_pattern_on_a_line,
+                                            noise=args.noise,
+                                            split=args.split,
+                                            suffix=f"{args.nbr_of_rows}_{args.nbr_of_feature}_{args.nbr_pattern}_{args.noise}_{today}",
+                                            output_dir=args.output_dir)
 
     config = args.__dict__.copy()
-    config["data_file"] = data_file
+    config["pattern_file"] = pattern_files
+    config["data_file"] = data_files
     config["density"] = line_manager.nbr_of_one / (args.nbr_of_feature * args.nbr_of_rows)
-    with open(os.path.join(args.output_dir, f'config_{today}.txt'), 'w') as fd:
+    with open(os.path.join(args.output_dir, f'config_{today}.json'), 'w') as fd:
         json.dump(config, fd)
 
 
 if __name__ == "__main__":
     LOG.info("Start")
     argument = "-o output --nbr_pattern 100 --min_size 2 --max_size 500 --nbr_of_feature 100000 --split 50 " \
-               "--no_intersections --nbr_of_rows 10000"
+               "--no_intersections --nbr_of_rows 10000"# --categories_off"
     main(argument.split())
     LOG.info("End")

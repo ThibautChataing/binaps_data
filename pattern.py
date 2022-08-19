@@ -115,7 +115,7 @@ class PatternValueDealer(metaclass=PatternDealerMeta):
         self.nbr_feature = nbr_feature
 
         if no_intersections:
-            self.val = [n for n in range(nbr_feature+1)]
+            self.val = [n for n in range(nbr_feature + 1)]
             self.get_val = self.no_intersect
         else:
             self.get_val = self.all
@@ -143,18 +143,8 @@ class PatternValueDealer(metaclass=PatternDealerMeta):
         pass
 
 
-def put_label(pattern, split):
-    label = 0 if random.random() <= (split / 100) else 1
-    pattern.set_label(label)
-    return pattern
-
-
-def no_label(pattern, split):
-    return pattern
-
-
 class PatternManager:
-    patterns = []
+    patterns = set()
     max_using_pattern = -1
 
     def __init__(self, max_using_pattern):
@@ -168,7 +158,6 @@ class PatternManager:
                         split: int,
                         output_dir: str,
                         no_intersections: bool,
-                        categories_off: bool,
                         today: str) -> set:
         """
         Create all pattern
@@ -179,28 +168,19 @@ class PatternManager:
         :param split: repartition of pattern between the two categories (only use if categories_off = False)
         :param output_dir: output directory to hold all result
         :param no_intersections: specify if all pattern shouldn't have any intersections between themselfs
-        :param categories_off: split pattern in two catergorues
         :param today: datetime in str
         :return: set of Pattern
         """
-        patterns = set()
         cpt_pat = 0
 
         pattern_value_dealer = PatternValueDealer(nbr_of_feature, no_intersections=no_intersections)
-
-        # If we don"t want categories, we just override the label finding function
-        if categories_off:
-            log.info("Category has been disabled")
-            set_label = no_label
-        else:
-            set_label = put_label
 
         pbar = tqdm.tqdm(nbr_pattern)
         while cpt_pat < nbr_pattern:
             pattern = Pattern()
             size = random.randint(min_size, max_size)
 
-            pattern = set_label(pattern, split)
+            pattern = self._set_label(pattern, split)
 
             try:
                 pattern.values = pattern_value_dealer.get_val(size)
@@ -210,33 +190,56 @@ class PatternManager:
                     f"of feature, the size of patterns and the no_intersection modes it can't be done. "
                     f"The running has been stopped here")
                 break
-            patterns.add(pattern)
 
-            if cpt_pat >= len(patterns):  # test duplicate
+            self._add_self_pattern(pattern)
+
+            if cpt_pat >= self._get_pattern_count(-1):  # test duplicate
                 continue
 
             cpt_pat += 1
             pbar.update(1)
 
-        log.info(f"{len(patterns)} patterns created")
+        log.info(f"{self._get_pattern_count(-1)} patterns created")
 
+        self._convert_self_pattern_to_list()
+        files = self._save_patterns(output_dir, today)
+
+        return files
+
+    def _convert_self_pattern_to_list(self):
+        self.patterns = [*self.patterns]
+
+    def _set_label(self, pattern, split):
+        return pattern
+
+    def _add_self_pattern(self, pattern: Pattern):
+        self.patterns.add(pattern)
+
+    def _get_pattern_count(self, label):
+        return len(self.patterns)
+
+    def _get_all_patterns(self):
+        return self.patterns
+
+    def _get_pat(self, indice, label):
+        return self.patterns[indice]
+
+    def _save_patterns(self, output_dir, today):
         pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
-        if categories_off:
-            PatternWriter.write_patterns_only(patterns, pattern_file)
-        else:
-            label_file = os.path.join(output_dir, f"label_{today}.txt")
-            PatternWriter.write_patterns_and_labels(patterns, pattern_file, label_file)
+        PatternWriter.write_patterns_only(self._get_all_patterns(), pattern_file)
+        return pattern_file
 
-        self.patterns = [*patterns]  # unpack to list
+    def _pop_pattern(self, indice, label):
+        self.patterns.pop(indice)
 
-    def get_patterns(self, nbr_of_pattern):
+    def get_patterns(self, nbr_of_pattern, label):
         pats = []
-        indice = random.sample(range(0, len(self.patterns)), nbr_of_pattern)  #  get indice of pattern for this line
+        indice = random.sample(range(0, self._get_pattern_count(label)), nbr_of_pattern)  # get indice of pattern for this line
         for i in sorted(indice, reverse=True):  # for each indice in decreased order for the pop
-            over_limit = self.patterns[i].update_use(self.max_using_pattern)  # update the use of each pattern
-            pats.append(self.patterns[i].values)
+            over_limit = self._get_pat(i, label).update_use(self.max_using_pattern)  # update the use of each pattern
+            pats.append(self._get_pat(i, label).values)
             if over_limit:  # if a pattern is over the limit of use
-                self.patterns.pop(i)
+                self._pop_pattern(i, label)
 
         ret = set()
         for p in pats:
@@ -245,9 +248,65 @@ class PatternManager:
         return [*ret]
 
 
+class PatternManagerWithCat(PatternManager):
+    patterns = {
+        Category.CAT0: set(),
+        Category.CAT1: set()
+    }
+
+    def __init__(self, max_using_pattern):
+        super().__init__(max_using_pattern)
+        log.info("Pattern with category")
+
+    def _convert_self_pattern_to_list(self):
+        self.patterns[Category.CAT0] = [*self.patterns[Category.CAT0]]
+        self.patterns[Category.CAT1] = [*self.patterns[Category.CAT1]]
+
+    def _set_label(self, pattern, split):
+        label = 0 if random.random() <= (split / 100) else 1
+        pattern.set_label(label)
+        return pattern
+
+    def _add_self_pattern(self, pattern: Pattern):
+        if pattern.label == Category.CAT0:
+            self.patterns[Category.CAT0].add(pattern)
+        elif pattern.label == Category.CAT1:
+            self.patterns[Category.CAT1].add(pattern)
+        else:
+            log.critical(f"Problem with category for this pattern {pattern}")
+
+    def _get_pattern_count(self, label):
+        if label == Category.CAT0:
+            return len(self.patterns[Category.CAT0])
+        elif label == Category.CAT1:
+            return len(self.patterns[Category.CAT1])
+        else:
+            return len(self.patterns[Category.CAT0]) + len(self.patterns[Category.CAT1])
+
+    def _get_pat(self, indice, label):
+        if label == Category.CAT0:
+            return [*self.patterns[Category.CAT0]][indice]
+        elif label == Category.CAT1:
+            return [*self.patterns[Category.CAT1]][indice]
+
+    def _get_all_patterns(self):
+        return [*self.patterns[Category.CAT0]] + [*self.patterns[Category.CAT1]]
+
+    def _save_patterns(self, output_dir, today):
+        pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
+        label_file = os.path.join(output_dir, f"pattern_label_{today}.txt")
+        PatternWriter.write_patterns_and_labels(self._get_all_patterns(), pattern_file, label_file)
+        return pattern_file, label_file
+
+    def _pop_pattern(self, indice, label):
+        if label == Category.CAT0:
+            return self.patterns[Category.CAT0].pop(indice)
+        elif label == Category.CAT1:
+            return self.patterns[Category.CAT1].pop(indice)
+
+
 if __name__ == '__main__':
     p = PatternValueDealer(100000)
     for i in range(1000):
         p.all(100, 3)
         print(p.no_intersect(3))
-
