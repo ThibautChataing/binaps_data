@@ -1,23 +1,25 @@
 import argparse
-import random
-import tqdm
+import json
 import datetime
 import os
 
 from binaps_data.utils.logs import log as LOG
-from binaps_data.pattern import Pattern, PatternValueDealer, PatternWriter
+from binaps_data.pattern import PatternManager
+from binaps_data.line import LineManager
 
 
-def argument_parser() -> argparse.Namespace:
+def argument_parser(cp_args=None) -> argparse.Namespace:
     # Get argument from command line
     """
     Get argument from command line
     Return [argparse.Namespace]
     """
     LOG.debug("Parsing argument")
+    # Arguments to generate patterns
     parser = argparse.ArgumentParser(description='Create data for binaps contrastive experiments')
     parser.add_argument('-o', '--output_dir',
-                        type=str, default=".", help="Output directory, file will be ./pattern_date.txt and ./label_date.txt")
+                        type=str, default=".",
+                        help="Output directory, file will be ./pattern_date.txt and ./label_date.txt")
     parser.add_argument('--nbr_pattern',
                         type=int, default="10", help="Number of pattern to generate inside the data")
     parser.add_argument('--no_intersections',
@@ -26,7 +28,7 @@ def argument_parser() -> argparse.Namespace:
     parser.add_argument('--min_size',
                         type=int, default="2", help="minimum pattern size")
     parser.add_argument('--max_size',
-                        type=int, default="5", help="maximum pattern size")
+                        type=int, default="10", help="maximum pattern size")
     parser.add_argument('--nbr_of_feature', type=int, default="100",
                         help="Number of feature (pattern will be chosen inside [0,nbr_of_features]")
     parser.add_argument('--categories_off',
@@ -37,85 +39,70 @@ def argument_parser() -> argparse.Namespace:
                         help="Split between both categories, in percent. "
                              "The value given will be for the first category. The other will be 100-split")
 
+    # Arguments to generate lines
+    parser.add_argument('--nbr_of_rows', type=int, default="10000",
+                        help="Number of row wanted")
+    parser.add_argument('--noise', type=float, default="0.001",
+                        help="Noise applied to the data (additive and destructive")
+    parser.add_argument('--max_using_pattern', type=int, default="0",
+                        help="If greater than 0, maximum number of time a pattern will be used to generate data")
+    parser.add_argument('--max_pattern_on_a_line', type=int, default="10",
+                        help="If positive, maximum number of pattern used to generate one line")
+    parser.add_argument('--fill_with_noise', action='store_true', default=False,
+                        help="If there is a maximum of use by pattern, this feature allow to fill line only with noise")
 
-    #parser.add_argument('--overlap_pattern_inclusion',
+    # parser.add_argument('--overlap_pattern_inclusion',
     #                    action='store_true', default=False, help="Allow patterns include in an other")
     # TODO : To add this feature, we adivce to use the no_intersect mode and then add pattern from other
 
-    #parser.add_argument('--overlap_categorie',
+    # parser.add_argument('--overlap_categorie',
     #                    action='store_true', default=False, help="Allow patterns belonging to both class")
     # TODO : To add this feature, we adivce to use the no_intersect mode and then add pattern from other
 
-    args = parser.parse_args()
+    args = parser.parse_args(cp_args)
     LOG.info("Argument parsed")
     LOG.debug(f"Arguments: {args}")
 
     return args
 
 
-def put_label(pattern, split):
-    label = 0 if random.random() <= (split / 100) else 1
-    pattern.set_label(label)
-    return pattern
-
-
-def no_label(pattern, split):
-    return pattern
-
-
-def main():
+def main(cp_args=None):
+    # ND indice for column start with 1
     LOG.debug("main")
     today = datetime.datetime.now().strftime("%Y-%m-%dT%Hh%Mm%Ss")
-    args = argument_parser()
+    args = argument_parser(cp_args)
 
-    patterns = set()
-    cpt_pat = 0
+    pattern_manager = PatternManager(max_using_pattern=args.max_using_pattern)
+    pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
+                                    nbr_pattern=args.nbr_pattern,
+                                    min_size=args.min_size,
+                                    max_size=args.max_size,
+                                    split=args.split,
+                                    output_dir=args.output_dir,
+                                    no_intersections=args.no_intersections,
+                                    categories_off=args.categories_off,
+                                    today=today)
 
-    pattern_value_dealer = PatternValueDealer(args.nbr_of_feature, no_intersections=args.no_intersections)
+    line_manager = LineManager()
 
-    # If we don"t want categories, we just override the label finding function
-    if args.categories_off:
-        LOG.info("Category has been disabled")
-        set_label = no_label
-    else:
-        set_label = put_label
+    data_file = os.path.join(args.output_dir, f"synthetic_data_{args.nbr_of_rows}_{args.nbr_of_feature}_"
+                                              f"{args.nbr_pattern}_{args.noise}_{today}.dat")
+    line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
+                                       patterns_manager=pattern_manager,
+                                       max_pat_by_line=args.max_pattern_on_a_line,
+                                       noise=args.noise,
+                               data_file=data_file)
 
-    pbar = tqdm.tqdm(args.nbr_pattern)
-    while cpt_pat < args.nbr_pattern:
-        pattern = Pattern()
-        size = random.randint(args.min_size, args.max_size)
-
-        pattern = set_label(pattern, args.split)
-
-        try:
-            pattern.values = pattern_value_dealer.get_val(size)
-        except ValueError:
-            LOG.error(f"Arguments can't be followed. {args.nbr_pattern} patterns has been asked but in with the number "
-                      f"of feature, the size of patterns and the no_intersection modes it can't be done. "
-                      f"The running has been stopped here")
-            break
-        patterns.add(pattern)
-
-        if cpt_pat >= len(patterns):  # test duplicate
-            continue
-
-        cpt_pat += 1
-        pbar.update(1)
-
-    LOG.info(f"{len(patterns)} patterns created")
-
-    pattern_file = os.path.join(args.output_dir, f"pattern_{today}.txt")
-    if args.categories_off:
-        PatternWriter.write_patterns_only(patterns, pattern_file)
-    else:
-        label_file = os.path.join(args.output_dir, f"label_{today}.txt")
-        PatternWriter.write_patterns_and_labels(patterns, pattern_file, label_file)
-
+    config = args.__dict__.copy()
+    config["data_file"] = data_file
+    config["density"] = line_manager.nbr_of_one / (args.nbr_of_feature * args.nbr_of_rows)
     with open(os.path.join(args.output_dir, f'config_{today}.txt'), 'w') as fd:
-        fd.write(str(args.__dict__))
+        json.dump(config, fd)
 
 
 if __name__ == "__main__":
     LOG.info("Start")
-    main()
+    argument = "-o output --nbr_pattern 100 --min_size 2 --max_size 500 --nbr_of_feature 100000 --split 50 " \
+               "--no_intersections --nbr_of_rows 10000"
+    main(argument.split())
     LOG.info("End")

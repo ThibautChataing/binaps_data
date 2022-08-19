@@ -6,6 +6,7 @@ def set_logger(file_name=None, log_level=logging.DEBUG):
     """
     Args:
         file_name: name for the file to log (full path and extension ex: output/run.log)
+        :param log_level:
     """
     log = logging.getLogger()
     log.setLevel(level=log_level)
