@@ -2,10 +2,14 @@ import argparse
 import json
 import datetime
 import os
+import logging
+import gc
 
-from binaps_data.utils.logs import log as LOG
+from binaps_data.utils.logs import set_logger
 from binaps_data.pattern import PatternManager, PatternManagerWithCat
 from binaps_data.line import LineManager, LineManagerWithCat
+
+log = logging.getLogger('main')
 
 
 def argument_parser(cp_args=None) -> argparse.Namespace:
@@ -14,7 +18,7 @@ def argument_parser(cp_args=None) -> argparse.Namespace:
     :param cp_args: possible way to pass arguments to the parser
     :return: [argparse.Namespace]
     """
-    LOG.debug("Parsing argument")
+    log.debug("Parsing argument")
     # Arguments to generate patterns
     parser = argparse.ArgumentParser(description='Create data for binaps contrastive experiments')
     parser.add_argument('-o', '--output_dir',
@@ -38,6 +42,8 @@ def argument_parser(cp_args=None) -> argparse.Namespace:
     parser.add_argument('--split', type=int, default="50",
                         help="Split between both categories, in percent. "
                              "The value given will be for the first category. The other will be 100-split")
+    parser.add_argument('--disable_tqdm', action="store_true", default=False,
+                        help="Disable tqdm")
 
     # Arguments to generate lines
     parser.add_argument('--nbr_of_rows', type=int, default="10000",
@@ -60,15 +66,15 @@ def argument_parser(cp_args=None) -> argparse.Namespace:
     # TODO : To add this feature, we adivce to use the no_intersect mode and then add pattern from other
 
     args = parser.parse_args(cp_args)
-    LOG.info("Argument parsed")
-    LOG.debug(f"Arguments: {args}")
+    log.info("Argument parsed")
+    log.debug(f"Arguments: {args}")
 
     return args
 
 
 def main(cp_args=None):
     # ND indice for column start with 1
-    LOG.debug("main")
+    log.debug("main")
     today = datetime.datetime.now().strftime("%Y-%m-%dT%Hh%Mm%Ss")
     args = argument_parser(cp_args)
 
@@ -76,9 +82,12 @@ def main(cp_args=None):
     if args.categories_off:
         pattern_manager = PatternManager(max_using_pattern=args.max_using_pattern)
         line_manager = LineManager()
+        max_pat_line = args.max_pattern_on_a_line if args.max_pattern_on_a_line < args.nbr_pattern else args.nbr_pattern
     else:
         pattern_manager = PatternManagerWithCat(max_using_pattern=args.max_using_pattern)
         line_manager = LineManagerWithCat()
+        max_pat_line = args.max_pattern_on_a_line if args.max_pattern_on_a_line < (args.nbr_pattern/2) else args.nbr_pattern/2
+
 
     #  Create all patterns
     pattern_files = pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
@@ -88,17 +97,19 @@ def main(cp_args=None):
                                                     split=args.split,
                                                     output_dir=args.output_dir,
                                                     no_intersections=args.no_intersections,
-                                                    today=today)
+                                                    today=today,
+                                                    disable_tqdm=args.disable_tqdm)
 
     #  Compile lines based on patterns. The .dat format is used to speed up process (kind of meta way for binary DB,
     #  we only specified indice of 1. Many place is won because of sparsity)
     data_files = line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
                                             patterns_manager=pattern_manager,
-                                            max_pat_by_line=args.max_pattern_on_a_line,
+                                            max_pat_by_line=max_pat_line,
                                             noise=args.noise,
                                             split=args.split,
                                             suffix=f"{args.nbr_of_rows}_{args.nbr_of_feature}_{args.nbr_pattern}_{args.noise}_{today}",
-                                            output_dir=args.output_dir)
+                                            output_dir=args.output_dir,
+                                            disable_tqdm=args.disable_tqdm)
 
     config = args.__dict__.copy()
     config["pattern_file"] = pattern_files
@@ -107,10 +118,15 @@ def main(cp_args=None):
     with open(os.path.join(args.output_dir, f'config_{today}.json'), 'w') as fd:
         json.dump(config, fd)
 
+    log.info("Cleaning")
+    del pattern_manager
+    del line_manager
+    gc.collect()
 
 if __name__ == "__main__":
-    LOG.info("Start")
+    log = set_logger()
+    log.info("Start")
     argument = "-o output --nbr_pattern 100 --min_size 2 --max_size 500 --nbr_of_feature 100000 --split 50 " \
                "--no_intersections --nbr_of_rows 10000"# --categories_off"
     main(argument.split())
-    LOG.info("End")
+    log.info("End")

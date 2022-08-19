@@ -2,8 +2,9 @@ import enum
 import random
 import tqdm
 import os
+import logging
 
-from binaps_data.utils.logs import log
+log = logging.getLogger('main')
 
 
 class Category(enum.IntEnum):
@@ -72,8 +73,9 @@ class PatternWriter:
     """
     Write patterns to files
     """
+
     @staticmethod
-    def write_patterns_and_labels(pattern_list: list, pattern_file: str, label_file: str):
+    def write_patterns_and_labels(pattern_list: list, pattern_file: str, label_file: str, disable_tqdm: bool):
         """
         Write patterns and it's label to two separate files
         :param pattern_list: list containing patterns
@@ -83,7 +85,7 @@ class PatternWriter:
         log.info(f"Saving pattern to {pattern_file} and label to {label_file}")
         pattern_descriptor = open(pattern_file, 'w')
         label_descriptor = open(label_file, 'w')
-        for pat in tqdm.tqdm(pattern_list):
+        for pat in tqdm.tqdm(pattern_list, disable=disable_tqdm):
             pattern_descriptor.write(pat.to_write_values() + '\n')
             label_descriptor.write(pat.to_write_label() + '\n')
 
@@ -92,7 +94,7 @@ class PatternWriter:
         log.info("Saving done")
 
     @staticmethod
-    def write_patterns_only(pattern_list: list, pattern_file: str):
+    def write_patterns_only(pattern_list: list, pattern_file: str, disable_tqdm: bool):
         """
         Write pattern to a file
         :param pattern_list: list of pattern
@@ -100,7 +102,7 @@ class PatternWriter:
         """
         log.info(f"Saving pattern only to {pattern_file}")
         pattern_descriptor = open(pattern_file, 'w')
-        for pat in tqdm.tqdm(pattern_list):
+        for pat in tqdm.tqdm(pattern_list, disable=disable_tqdm):
             pattern_descriptor.write(pat.to_write_values() + '\n')
 
         pattern_descriptor.close()
@@ -125,7 +127,7 @@ class PatternDealerMeta(type):
         return cls._instances[cls]
 
 
-class PatternValueDealer(metaclass=PatternDealerMeta):
+class PatternValueDealer:
     """
     Dealer of value for patterns
 
@@ -139,6 +141,7 @@ class PatternValueDealer(metaclass=PatternDealerMeta):
         log.debug(f"Init pattern dealer with {nbr_feature} features and 'no_intersection' at {no_intersections}")
 
         self.nbr_feature = nbr_feature
+        self.val = None
 
         if no_intersections:
             self.val = [n for n in range(nbr_feature + 1)]
@@ -181,6 +184,7 @@ class PatternManager:
 
     def __init__(self, max_using_pattern):
         self.max_using_pattern = max_using_pattern
+        self.patterns = set()
 
     def compile_pattern(self,
                         nbr_of_feature: int,
@@ -190,7 +194,8 @@ class PatternManager:
                         split: int,
                         output_dir: str,
                         no_intersections: bool,
-                        today: str) -> str:
+                        today: str,
+                        disable_tqdm: bool) -> str:
         """
         Create all pattern
         :param nbr_of_feature: number of feature from the data to extract pattern
@@ -203,12 +208,11 @@ class PatternManager:
         :param today: moment of execution
         :return: saving file name for the pattern
         """
-        cpt_pat = 0        # counter of pattern
+        cpt_pat = 0  # counter of pattern
 
         pattern_value_dealer = PatternValueDealer(nbr_of_feature, no_intersections=no_intersections)
 
-
-        pbar = tqdm.tqdm(nbr_pattern)  # progress bar
+        pbar = tqdm.tqdm(nbr_pattern, disable=disable_tqdm)  # progress bar
         while cpt_pat < nbr_pattern:
             pattern = Pattern()
             size = random.randint(min_size, max_size)  # define the size of the pattern
@@ -226,8 +230,9 @@ class PatternManager:
 
             self._add_self_pattern(pattern)  # save the pattern inside the manager
 
-            if cpt_pat >= self._get_pattern_count(-1):  # test if the pattern is a duplicate (we use set so if the size has not grow,
-                                                        # it means this pattern was already saved somewhere
+            if cpt_pat >= self._get_pattern_count(
+                    -1):  # test if the pattern is a duplicate (we use set so if the size has not grow,
+                # it means this pattern was already saved somewhere
                 continue
 
             cpt_pat += 1
@@ -236,7 +241,7 @@ class PatternManager:
         log.info(f"{self._get_pattern_count(-1)} patterns created")
 
         self._convert_self_pattern_to_list()  # to simplify the folowing code, we convert patterns to a list instead of a set
-        files = self._save_patterns(output_dir, today)
+        files = self._save_patterns(output_dir, today, disable_tqdm)
 
         return files
 
@@ -276,9 +281,9 @@ class PatternManager:
         """
         return self.patterns[indice]
 
-    def _save_patterns(self, output_dir, today):
+    def _save_patterns(self, output_dir, today, disable_tqdm):
         pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
-        PatternWriter.write_patterns_only(self._get_all_patterns(), pattern_file)
+        PatternWriter.write_patterns_only(self._get_all_patterns(), pattern_file, disable_tqdm)
         return pattern_file
 
     def _pop_pattern(self, indice, label):
@@ -286,7 +291,10 @@ class PatternManager:
 
     def get_patterns(self, nbr_of_pattern, label):
         pats = []
-        indice = random.sample(range(0, self._get_pattern_count(label)), nbr_of_pattern)  # get indice of pattern for this line
+        nbr_of_pattern = nbr_of_pattern if nbr_of_pattern < self._get_pattern_count(
+            label) else self._get_pattern_count(label)
+        indice = random.sample(range(0, self._get_pattern_count(label)),
+                               nbr_of_pattern)  # get indice of pattern for this line
         for i in sorted(indice, reverse=True):  # for each indice in decreased order for the pop
             over_limit = self._get_pat(i, label).update_use(self.max_using_pattern)  # update the use of each pattern
             pats.append(self._get_pat(i, label).values)
@@ -295,7 +303,7 @@ class PatternManager:
 
         ret = set()
         for p in pats:
-            ret.update(set(p), self.max_using_pattern)
+            ret.update(set(p))
 
         return [*ret]
 
@@ -311,6 +319,10 @@ class PatternManagerWithCat(PatternManager):
 
     def __init__(self, max_using_pattern):
         super().__init__(max_using_pattern)
+        self.patterns = {
+            Category.CAT0: set(),
+            Category.CAT1: set()
+        }
         log.info("Pattern with category")
 
     def _convert_self_pattern_to_list(self):
@@ -347,10 +359,10 @@ class PatternManagerWithCat(PatternManager):
     def _get_all_patterns(self):
         return self.patterns[Category.CAT0] + self.patterns[Category.CAT1]
 
-    def _save_patterns(self, output_dir, today):
+    def _save_patterns(self, output_dir, today, disable_tqdm):
         pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
         label_file = os.path.join(output_dir, f"pattern_label_{today}.txt")
-        PatternWriter.write_patterns_and_labels(self._get_all_patterns(), pattern_file, label_file)
+        PatternWriter.write_patterns_and_labels(self._get_all_patterns(), pattern_file, label_file, disable_tqdm)
         return pattern_file, label_file
 
     def _pop_pattern(self, indice, label):

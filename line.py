@@ -1,8 +1,9 @@
 import tqdm
 import random
 import os
+import logging
 
-from binaps_data.utils.logs import log
+log = logging.getLogger('main')
 
 
 class LineManager:
@@ -16,6 +17,11 @@ class LineManager:
     lines = []
     labels = []
 
+    def __init__(self):
+        self.nbr_of_one = 0
+        self.lines = []
+        self.labels = []
+
     def compile_lines(self,
                       nbr_of_rows: int,
                       patterns_manager: object,
@@ -23,7 +29,8 @@ class LineManager:
                       noise: float,
                       split: int,
                       suffix: str,
-                      output_dir) -> str:
+                      output_dir,
+                      disable_tqdm: bool) -> str:
         """
 
         :param nbr_of_rows: number of rows/lines to create
@@ -36,7 +43,7 @@ class LineManager:
         :return: string or tuple of string, name(s) or output files
         """
         log.info("Compile line")
-        for r in tqdm.trange(nbr_of_rows):
+        for r in tqdm.trange(nbr_of_rows, disable=disable_tqdm):
             label = 0 if random.random() <= (split / 100) else 1  # unused if unecessary.
             nbr_pattern = random.randint(1, max_pat_by_line)
             patterns = patterns_manager.get_patterns(nbr_pattern, label)  # only the values
@@ -48,9 +55,9 @@ class LineManager:
 
             self.lines.append(line)
             self.labels.append(label)
-        return self.save_data(output_dir, suffix)
+        return self.save_data(output_dir, suffix, disable_tqdm)
 
-    def save_data(self, output_dir: str, suffix: str) -> str:
+    def save_data(self, output_dir: str, suffix: str, disable_tqdm: bool) -> str:
         """
         Save lines inside a file
         :param output_dir: path to output directory
@@ -60,7 +67,7 @@ class LineManager:
         data_file = os.path.join(output_dir, f"synthetic_data_{suffix}.dat")
         log.info(f"Saving data to {data_file}")
         data_descriptor = open(data_file, 'w')
-        for line in tqdm.tqdm(self.lines):
+        for line in tqdm.tqdm(self.lines, disable=disable_tqdm):
             data_descriptor.write(' '.join(list(map(str, line))) + '\n')
 
         data_descriptor.close()
@@ -86,14 +93,14 @@ class LineManagerWithCat(LineManager):
     """
     Son of LineManager, created to manage categories for supervised learning
     """
-    def save_data(self, output_dir: str, suffix: str) -> tuple:
+    def save_data(self, output_dir: str, suffix: str, disable_tqdm: bool) -> tuple:
         data_file = os.path.join(output_dir, f"synthetic_data_{suffix}.dat")
         data_label_file = os.path.join(output_dir, f"synthetic_data_{suffix}.label")
 
         log.info(f"Saving data to {data_file} and {data_label_file}")
         data_descriptor = open(data_file, 'w')
         data_label_descriptor = open(data_label_file, 'w')
-        for i in tqdm.trange(len(self.lines)):
+        for i in tqdm.trange(len(self.lines), disable=disable_tqdm):
             data_descriptor.write(' '.join(list(map(str, self.lines[i]))) + '\n')
             data_label_descriptor.write(str(self.labels[i]) + '\n')
 
