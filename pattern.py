@@ -12,6 +12,12 @@ class Category(enum.IntEnum):
 
 
 class Pattern(object):
+    """
+    Pattern object, compose of
+        - values :  list of int, representing indice inside the DB. The pattern is a list of columns' id
+        - label  : In case of supervised learning, pattern are associated to label
+        - used   : When using pattern to generate line of data we can consume it a maximum number of time
+    """
     values = []
     label = None
     used = 0
@@ -26,9 +32,11 @@ class Pattern(object):
         self.label = label
 
     def __hash__(self):
+        #  to use pattern in set, it has to be hashable for comparison
         return hash((tuple(self.values), self.label))
 
     def __eq__(self, other):
+        #  define equal for comparison purpose
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.values == other.values and self.label == other.label
@@ -50,8 +58,8 @@ class Pattern(object):
 
     def update_use(self, limit=0):
         """
-        Update a compteur about the use of this pattern. If a limit is specified and the used is over it return true to alert.
-        :rtype: object
+        Update a counter about the use of this pattern. If a limit is specified and the used is over it return true to alert.
+        :limit: limit to delete this pattern
         """
         self.used += 1
         if limit and self.used > limit:
@@ -61,12 +69,21 @@ class Pattern(object):
 
 
 class PatternWriter:
+    """
+    Write patterns to files
+    """
     @staticmethod
-    def write_patterns_and_labels(pattern_set: set, pattern_file: str, label_file: str):
+    def write_patterns_and_labels(pattern_list: list, pattern_file: str, label_file: str):
+        """
+        Write patterns and it's label to two separate files
+        :param pattern_list: list containing patterns
+        :param pattern_file: output file for pattern values
+        :param label_file: output file for label
+        """
         log.info(f"Saving pattern to {pattern_file} and label to {label_file}")
         pattern_descriptor = open(pattern_file, 'w')
         label_descriptor = open(label_file, 'w')
-        for pat in tqdm.tqdm(pattern_set):
+        for pat in tqdm.tqdm(pattern_list):
             pattern_descriptor.write(pat.to_write_values() + '\n')
             label_descriptor.write(pat.to_write_label() + '\n')
 
@@ -75,10 +92,15 @@ class PatternWriter:
         log.info("Saving done")
 
     @staticmethod
-    def write_patterns_only(pattern_set: set, pattern_file: str):
+    def write_patterns_only(pattern_list: list, pattern_file: str):
+        """
+        Write pattern to a file
+        :param pattern_list: list of pattern
+        :param pattern_file: output file
+        """
         log.info(f"Saving pattern only to {pattern_file}")
         pattern_descriptor = open(pattern_file, 'w')
-        for pat in tqdm.tqdm(pattern_set):
+        for pat in tqdm.tqdm(pattern_list):
             pattern_descriptor.write(pat.to_write_values() + '\n')
 
         pattern_descriptor.close()
@@ -87,9 +109,7 @@ class PatternWriter:
 
 class PatternDealerMeta(type):
     """
-    The Singleton class can be implemented in different ways in Python. Some
-    possible methods include: base class, decorator, metaclass. We will use the
-    metaclass because it is best suited for this purpose.
+    Singleton in case we need to do some multiprocessing. Not sure it's needed. So not used at the moment
     """
 
     _instances = {}
@@ -106,6 +126,12 @@ class PatternDealerMeta(type):
 
 
 class PatternValueDealer(metaclass=PatternDealerMeta):
+    """
+    Dealer of value for patterns
+
+        nbr_feature : number of feature the synthetic DB will have
+        val         : possible value for the pattern to pick inside
+    """
     nbr_feature = 0
     val = None
 
@@ -122,14 +148,14 @@ class PatternValueDealer(metaclass=PatternDealerMeta):
 
     def all(self, size):
         """
-        Get randomly with uniforme probability "size" numbre between 1 and "nbr_feature"
+        Get randomly with uniforme probability "size" number between 1 and "nbr_feature" infinetly
         """
         ret = sorted(random.sample(range(1, self.nbr_feature), size), reverse=False)
         return ret
 
     def no_intersect(self, size):
         """
-        Get randomly with uniforme probability "size" numbre between 1 and "nbr_feature" without replacement
+        Get randomly with uniforme probability "size" number between 1 and "nbr_feature" with consumming the value
         """
         indices = random.sample(range(1, len(self.val)), size)
         ret = []
@@ -144,8 +170,14 @@ class PatternValueDealer(metaclass=PatternDealerMeta):
 
 
 class PatternManager:
+    """
+    Manage pattern
+
+        patterns          : hold the current patterns
+        max_using_pattern : if a pattern should be use in a limited way
+    """
     patterns = set()
-    max_using_pattern = -1
+    max_using_pattern = 0
 
     def __init__(self, max_using_pattern):
         self.max_using_pattern = max_using_pattern
@@ -158,7 +190,7 @@ class PatternManager:
                         split: int,
                         output_dir: str,
                         no_intersections: bool,
-                        today: str) -> set:
+                        today: str) -> str:
         """
         Create all pattern
         :param nbr_of_feature: number of feature from the data to extract pattern
@@ -168,22 +200,23 @@ class PatternManager:
         :param split: repartition of pattern between the two categories (only use if categories_off = False)
         :param output_dir: output directory to hold all result
         :param no_intersections: specify if all pattern shouldn't have any intersections between themselfs
-        :param today: datetime in str
-        :return: set of Pattern
+        :param today: moment of execution
+        :return: saving file name for the pattern
         """
-        cpt_pat = 0
+        cpt_pat = 0        # counter of pattern
 
         pattern_value_dealer = PatternValueDealer(nbr_of_feature, no_intersections=no_intersections)
 
-        pbar = tqdm.tqdm(nbr_pattern)
+
+        pbar = tqdm.tqdm(nbr_pattern)  # progress bar
         while cpt_pat < nbr_pattern:
             pattern = Pattern()
-            size = random.randint(min_size, max_size)
+            size = random.randint(min_size, max_size)  # define the size of the pattern
 
             pattern = self._set_label(pattern, split)
 
             try:
-                pattern.values = pattern_value_dealer.get_val(size)
+                pattern.values = pattern_value_dealer.get_val(size)  # assign values to the pattern from the dealer
             except ValueError:
                 log.error(
                     f"Arguments can't be followed. {nbr_pattern} patterns has been asked but in with the number "
@@ -191,9 +224,10 @@ class PatternManager:
                     f"The running has been stopped here")
                 break
 
-            self._add_self_pattern(pattern)
+            self._add_self_pattern(pattern)  # save the pattern inside the manager
 
-            if cpt_pat >= self._get_pattern_count(-1):  # test duplicate
+            if cpt_pat >= self._get_pattern_count(-1):  # test if the pattern is a duplicate (we use set so if the size has not grow,
+                                                        # it means this pattern was already saved somewhere
                 continue
 
             cpt_pat += 1
@@ -201,18 +235,30 @@ class PatternManager:
 
         log.info(f"{self._get_pattern_count(-1)} patterns created")
 
-        self._convert_self_pattern_to_list()
+        self._convert_self_pattern_to_list()  # to simplify the folowing code, we convert patterns to a list instead of a set
         files = self._save_patterns(output_dir, today)
 
         return files
 
+    # Multiple function to override when we are using categories
     def _convert_self_pattern_to_list(self):
         self.patterns = [*self.patterns]
 
     def _set_label(self, pattern, split):
+        """
+        Set the label of a pattern
+        :param pattern:
+        :param split: percentage of category
+        :return: pattern with its label
+        """
         return pattern
 
     def _add_self_pattern(self, pattern: Pattern):
+        """
+        Add the pattern to the manager
+        :param pattern:
+        :return:
+        """
         self.patterns.add(pattern)
 
     def _get_pattern_count(self, label):
@@ -222,6 +268,12 @@ class PatternManager:
         return self.patterns
 
     def _get_pat(self, indice, label):
+        """
+        Get pattern by indice and label
+        :param indice:
+        :param label:
+        :return:
+        """
         return self.patterns[indice]
 
     def _save_patterns(self, output_dir, today):
@@ -243,12 +295,15 @@ class PatternManager:
 
         ret = set()
         for p in pats:
-            ret.update(set(p))
+            ret.update(set(p), self.max_using_pattern)
 
         return [*ret]
 
 
 class PatternManagerWithCat(PatternManager):
+    """
+    Son of PatternManager to add the categories for supervised learning
+    """
     patterns = {
         Category.CAT0: set(),
         Category.CAT1: set()
@@ -285,12 +340,12 @@ class PatternManagerWithCat(PatternManager):
 
     def _get_pat(self, indice, label):
         if label == Category.CAT0:
-            return [*self.patterns[Category.CAT0]][indice]
+            return self.patterns[Category.CAT0][indice]
         elif label == Category.CAT1:
-            return [*self.patterns[Category.CAT1]][indice]
+            return self.patterns[Category.CAT1][indice]
 
     def _get_all_patterns(self):
-        return [*self.patterns[Category.CAT0]] + [*self.patterns[Category.CAT1]]
+        return self.patterns[Category.CAT0] + self.patterns[Category.CAT1]
 
     def _save_patterns(self, output_dir, today):
         pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")

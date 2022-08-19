@@ -6,6 +6,12 @@ from binaps_data.utils.logs import log
 
 
 class LineManager:
+    """
+    Manage lines for the synthetic DB
+        nbr_of_one : count the number of one put inside the DB to calculate sparsity later
+        lines      : hold created lines
+        labels     : hold associated labels if needed
+    """
     nbr_of_one = 0
     lines = []
     labels = []
@@ -17,7 +23,18 @@ class LineManager:
                       noise: float,
                       split: int,
                       suffix: str,
-                      output_dir):
+                      output_dir) -> str:
+        """
+
+        :param nbr_of_rows: number of rows/lines to create
+        :param patterns_manager: pattern manager to reach pattern
+        :param max_pat_by_line: maximum number of pattern inside one line
+        :param noise: noise to add to each line. Noise can be addition of one or switching one to zero
+        :param split: percentage(0-100) of the 0 categorty
+        :param suffix: suffixe for output's files
+        :param output_dir: output directory
+        :return: string or tuple of string, name(s) or output files
+        """
         log.info("Compile line")
         for r in tqdm.trange(nbr_of_rows):
             label = 0 if random.random() <= (split / 100) else 1  # unused if unecessary.
@@ -33,7 +50,13 @@ class LineManager:
             self.labels.append(label)
         return self.save_data(output_dir, suffix)
 
-    def save_data(self, output_dir, suffix: str):
+    def save_data(self, output_dir: str, suffix: str) -> str:
+        """
+        Save lines inside a file
+        :param output_dir: path to output directory
+        :param suffix: suffix to add to output files
+        :return: name of output file
+        """
         data_file = os.path.join(output_dir, f"synthetic_data_{suffix}.dat")
         log.info(f"Saving data to {data_file}")
         data_descriptor = open(data_file, 'w')
@@ -45,7 +68,13 @@ class LineManager:
         return data_file
 
     @staticmethod
-    def merge_noise_pat(noise: list, patterns: list):
+    def merge_noise_pat(noise: list, patterns: list) -> list:
+        """
+        Merge noise and pattern to form a complete line
+        :param noise: list of int where a noise will be applied (adding 1 if it was 0 or switching a 1 to a 0 is it was a 1)
+        :param patterns: list of int where 1 has been put in the line by patterns
+        :return: the line
+        """
         ret = []
         n_set = set(noise)
         p_set = set(patterns)
@@ -54,7 +83,10 @@ class LineManager:
 
 
 class LineManagerWithCat(LineManager):
-    def save_data(self, output_dir: str, suffix: str):
+    """
+    Son of LineManager, created to manage categories for supervised learning
+    """
+    def save_data(self, output_dir: str, suffix: str) -> tuple:
         data_file = os.path.join(output_dir, f"synthetic_data_{suffix}.dat")
         data_label_file = os.path.join(output_dir, f"synthetic_data_{suffix}.label")
 

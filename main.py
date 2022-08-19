@@ -9,10 +9,10 @@ from binaps_data.line import LineManager, LineManagerWithCat
 
 
 def argument_parser(cp_args=None) -> argparse.Namespace:
-    # Get argument from command line
     """
-    Get argument from command line
-    Return [argparse.Namespace]
+    Get argument from command line or in main
+    :param cp_args: possible way to pass arguments to the parser
+    :return: [argparse.Namespace]
     """
     LOG.debug("Parsing argument")
     # Arguments to generate patterns
@@ -72,6 +72,7 @@ def main(cp_args=None):
     today = datetime.datetime.now().strftime("%Y-%m-%dT%Hh%Mm%Ss")
     args = argument_parser(cp_args)
 
+    # Two mode actuel to create data, with ou withour two categories for supervised learning
     if args.categories_off:
         pattern_manager = PatternManager(max_using_pattern=args.max_using_pattern)
         line_manager = LineManager()
@@ -79,6 +80,7 @@ def main(cp_args=None):
         pattern_manager = PatternManagerWithCat(max_using_pattern=args.max_using_pattern)
         line_manager = LineManagerWithCat()
 
+    #  Create all patterns
     pattern_files = pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
                                                     nbr_pattern=args.nbr_pattern,
                                                     min_size=args.min_size,
@@ -88,6 +90,8 @@ def main(cp_args=None):
                                                     no_intersections=args.no_intersections,
                                                     today=today)
 
+    #  Compile lines based on patterns. The .dat format is used to speed up process (kind of meta way for binary DB,
+    #  we only specified indice of 1. Many place is won because of sparsity)
     data_files = line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
                                             patterns_manager=pattern_manager,
                                             max_pat_by_line=args.max_pattern_on_a_line,
