@@ -88,6 +88,10 @@ def main(cp_args=None):
         line_manager = LineManagerWithCat()
         max_pat_line = args.max_pattern_on_a_line if args.max_pattern_on_a_line < (args.nbr_pattern/2) else args.nbr_pattern/2
 
+    if args.no_intersections:
+        no_inter = "NO_INTER"
+    else:
+        no_inter = "INTER"
 
     #  Create all patterns
     pattern_files = pattern_manager.compile_pattern(nbr_of_feature=args.nbr_of_feature,
@@ -107,7 +111,7 @@ def main(cp_args=None):
                                             max_pat_by_line=max_pat_line,
                                             noise=args.noise,
                                             split=args.split,
-                                            suffix=f"{args.nbr_of_rows}_{args.nbr_of_feature}_{args.nbr_pattern}_{args.noise}_{today}",
+                                            suffix=f"{args.nbr_of_rows}_{args.nbr_of_feature}_{args.nbr_pattern}_{args.noise}_{no_inter}_{today}",
                                             output_dir=args.output_dir,
                                             disable_tqdm=args.disable_tqdm)
 
@@ -126,7 +130,7 @@ def main(cp_args=None):
 if __name__ == "__main__":
     log = set_logger()
     log.info("Start")
-    argument = "-o output --nbr_pattern 100 --min_size 2 --max_size 500 --nbr_of_feature 100000 --split 50 " \
-               "--no_intersections --nbr_of_rows 10000"# --categories_off"
+    argument = "-o output --nbr_pattern 100 --min_size 2 --max_size 5 --nbr_of_feature 100 --split 50 " \
+               "--nbr_of_rows 100"# --categories_off"
     main(argument.split())
     log.info("End")

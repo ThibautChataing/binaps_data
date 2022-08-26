@@ -9,14 +9,13 @@ def set_logger(file_name=None, log_level=logging.DEBUG):
         :param log_level:
     """
     log = logging.getLogger('main')
-    log.setLevel(level=log_level)
 
     # create formatter and add it to the handlers
     formatter = logging.Formatter('[%(levelname)s] %(module)s in %(funcName)s at %(lineno)dl : %(message)s')
 
     if file_name:
         # create file handler for logger.
-        fh = logging.FileHandler(file_name, mode='w')
+        fh = logging.FileHandler(file_name, mode='w+')
         fh.setLevel(level=logging.DEBUG)
         fh.setFormatter(formatter)
     # reate console handler for logger.
@@ -29,5 +28,7 @@ def set_logger(file_name=None, log_level=logging.DEBUG):
         log.addHandler(fh)
 
     log.addHandler(ch)
+    log.setLevel(level=logging.DEBUG)
+
 
     return log

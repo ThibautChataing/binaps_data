@@ -153,7 +153,7 @@ class PatternValueDealer:
         """
         Get randomly with uniforme probability "size" number between 1 and "nbr_feature" infinetly
         """
-        ret = sorted(random.sample(range(1, self.nbr_feature), size), reverse=False)
+        ret = sorted(random.sample(range(1, self.nbr_feature+1), size), reverse=False)
         return ret
 
     def no_intersect(self, size):
@@ -241,7 +241,12 @@ class PatternManager:
         log.info(f"{self._get_pattern_count(-1)} patterns created")
 
         self._convert_self_pattern_to_list()  # to simplify the folowing code, we convert patterns to a list instead of a set
-        files = self._save_patterns(output_dir, today, disable_tqdm)
+            
+        if no_intersections:
+            no_inter = "NO_INTER"
+        else:
+            no_inter = "INTER"
+        files = self._save_patterns(output_dir, today, disable_tqdm, no_inter)
 
         return files
 
@@ -281,8 +286,8 @@ class PatternManager:
         """
         return self.patterns[indice]
 
-    def _save_patterns(self, output_dir, today, disable_tqdm):
-        pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
+    def _save_patterns(self, output_dir, today, disable_tqdm, no_intersections):
+        pattern_file = os.path.join(output_dir, f"pattern_{no_intersections}_{today}.txt")
         PatternWriter.write_patterns_only(self._get_all_patterns(), pattern_file, disable_tqdm)
         return pattern_file
 
@@ -359,8 +364,8 @@ class PatternManagerWithCat(PatternManager):
     def _get_all_patterns(self):
         return self.patterns[Category.CAT0] + self.patterns[Category.CAT1]
 
-    def _save_patterns(self, output_dir, today, disable_tqdm):
-        pattern_file = os.path.join(output_dir, f"pattern_{today}.txt")
+    def _save_patterns(self, output_dir, today, disable_tqdm, no_inter):
+        pattern_file = os.path.join(output_dir, f"pattern_{no_inter}_{today}.txt")
         label_file = os.path.join(output_dir, f"pattern_label_{today}.txt")
         PatternWriter.write_patterns_and_labels(self._get_all_patterns(), pattern_file, label_file, disable_tqdm)
         return pattern_file, label_file

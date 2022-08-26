@@ -45,10 +45,10 @@ class LineManager:
         log.info("Compile line")
         for r in tqdm.trange(nbr_of_rows, disable=disable_tqdm):
             label = 0 if random.random() <= (split / 100) else 1  # unused if unecessary.
-            nbr_pattern = random.randint(1, max_pat_by_line)
+            nbr_pattern = random.randint(1, max_pat_by_line+1)
             patterns = patterns_manager.get_patterns(nbr_pattern, label)  # only the values
 
-            indice_noise = random.sample(range(1, nbr_of_rows), round(noise*nbr_of_rows))
+            indice_noise = random.sample(range(1, nbr_of_rows+1), round(noise*nbr_of_rows))
 
             line = self.merge_noise_pat(indice_noise, patterns)
             self.nbr_of_one += len(line)
