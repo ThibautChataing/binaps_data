@@ -107,6 +107,7 @@ def main(cp_args=None):
     #  Compile lines based on patterns. The .dat format is used to speed up process (kind of meta way for binary DB,
     #  we only specified indice of 1. Many place is won because of sparsity)
     data_files = line_manager.compile_lines(nbr_of_rows=args.nbr_of_rows,
+                                            nbr_of_feature=args.nbr_of_feature,
                                             patterns_manager=pattern_manager,
                                             max_pat_by_line=max_pat_line,
                                             noise=args.noise,

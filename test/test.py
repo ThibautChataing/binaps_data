@@ -7,7 +7,7 @@ from binaps_data.main import main
 from binaps_data.utils.logs import set_logger
 # nbr_rows, nbr_feature, nbr_pattern, noise, split
 runs = [
-    [1000, 1000, 10, 0.001, 50, " --no_intersections"],
+    #[1000, 1000, 10, 0.001, 50, " --no_intersections"],
     # [10000, 1000, 10, 0.001, 50, " --no_intersections"],
     # [100000, 1000, 10, 0.001, 50, " --no_intersections"],
     # [10000, 10000, 10, 0.001, 50, " --no_intersections"],
@@ -21,7 +21,7 @@ runs = [
     # [100000, 100000, 500, 0.001, 75, " --no_intersections"],
     [1000, 1000, 10, 0.001, 50, ""],
     # [10000, 1000, 10, 0.001, 50, ""],
-    # [100000, 1000, 10, 0.001, 50, ""],
+    #[100000, 1000, 10, 0.001, 50, ""],
     # [10000, 10000, 10, 0.001, 50, ""],
     # [100000, 10000, 10, 0.001, 50, ""],
     # [100000, 100000, 10, 0.001, 50, ""],

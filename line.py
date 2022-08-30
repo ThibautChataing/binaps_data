@@ -24,6 +24,7 @@ class LineManager:
 
     def compile_lines(self,
                       nbr_of_rows: int,
+                      nbr_of_feature: int,
                       patterns_manager: object,
                       max_pat_by_line: int,
                       noise: float,
@@ -48,7 +49,7 @@ class LineManager:
             nbr_pattern = random.randint(1, max_pat_by_line+1)
             patterns = patterns_manager.get_patterns(nbr_pattern, label)  # only the values
 
-            indice_noise = random.sample(range(1, nbr_of_rows+1), round(noise*nbr_of_rows))
+            indice_noise = random.sample(range(1, nbr_of_feature+1), round(noise*nbr_of_feature))
 
             line = self.merge_noise_pat(indice_noise, patterns)
             self.nbr_of_one += len(line)
